@@ -1,0 +1,32 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# data and intermediates: never commit
+*.npz
+*.npy
+*.edf
+*.edf.seizures
+*.pt
+*.parquet
+
+# generated outputs (keep the directories)
+results/*.csv
+figures/*.png
+figures/*.pdf
+!results/.gitkeep
+!figures/.gitkeep
+!paper/figures/*.pdf
+
+# LaTeX build products
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
+*.toc
+paper/*.pdf
+
+# path-rewrite backups
+*.py.bak

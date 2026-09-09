@@ -1,0 +1,1701 @@
+%% =====================================================================
+%%  Representation rather than architecture determines cross-cohort
+%%  transfer in automated scalp EEG seizure detection
+%%
+%%  Compile:  pdflatex main ; bibtex main ; pdflatex main ; pdflatex main
+%%  On Overleaf set the compiler to pdfLaTeX.
+%%
+%%  Standard article class, so it builds anywhere. Instructions for
+%%  switching to the IOP class at submission are at the end of the file.
+%% =====================================================================
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[top=2.0cm,bottom=2.0cm,left=2.0cm,right=2.0cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+
+%% Missing figures render as a labelled box rather than breaking the build.
+%% Put the PDFs in figures/ and they appear automatically; nothing else to
+%% change. Delete this block once every figure is in place.
+\graphicspath{{figures/}{./}}
+\makeatletter
+\let\orig@includegraphics\includegraphics
+\renewcommand{\includegraphics}[2][]{%
+  \IfFileExists{#2}%
+    {\orig@includegraphics[#1]{#2}}%
+    {\fbox{\parbox[c][3.8cm][c]{0.86\textwidth}{\centering
+      \textsf{\small figure not found}\\[2pt]\texttt{\footnotesize #2}}}}}
+\makeatother
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{microtype}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{authblk}
+\usepackage{titlesec}
+\usepackage{caption}
+
+
+\newcommand{\etal}{\textit{et~al.}}
+
+\captionsetup{font=small,labelfont=bf,skip=5pt}
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection.}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.4ex plus .4ex}{0.8ex}
+\titlespacing*{\subsection}{0pt}{1.2ex plus .3ex}{0.6ex}
+\setlength{\parskip}{0.25em}
+\setlength{\parindent}{1.2em}
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\intextsep}{10pt plus 2pt minus 2pt}
+\linespread{1.04}
+\setlength{\bibsep}{1pt}
+
+\renewcommand{\arraystretch}{1.08}
+\sisetup{detect-weight=true,detect-family=true}
+
+\title{\vspace{-1.2cm}\bfseries Representation rather than architecture
+dominates cross-cohort transfer in automated scalp EEG seizure detection}
+
+\author[1]{Anurag Tiwari}
+\affil[1]{\small Department of Computer Science and Engineering, South Asian
+University, Maidan Garhi, New Delhi 110068, India\\
+\texttt{anuragtiwari@sau.int}}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+\vspace{-0.8cm}
+
+\begin{abstract}
+\noindent\small
+\textbf{Objective.} Automated seizure detection is usually developed and
+validated within a single dataset, and the difficulty of transferring a
+detector to another recording centre is generally assumed to exceed that of
+transferring it to a new patient. We measured both under one protocol, and
+asked what determines the difference.
+\textbf{Approach.} Fourteen published architectures spanning 2.4$\times$10$^3$
+to 1.1$\times$10$^6$ parameters, and two handcrafted spectral feature
+families, were evaluated on CHB-MIT (24 recording sets from 23 paediatric
+subjects, \SI{256}{\hertz})
+and Siena (14 adult subjects, \SI{512}{\hertz}) across three nested settings:
+within-patient, cross-patient within a cohort, and cross-cohort in both
+directions. All models saw identical windows, splits and preprocessing.
+Evaluation prevalence was then swept from balanced to the native
+\SI{0.34}{\percent} with the trained model held fixed.
+\textbf{Main results.} Learned representations retained substantially more
+performance under cohort transfer than handcrafted features, while differing
+little among themselves (0.785--0.865 across fourteen architectures). Applied
+without retraining to all \num{1000311} windows at the native
+\SI{0.34}{\percent} prevalence, they reached a mean cross-cohort AUROC of
+0.843 against 0.686, a lift over chance of 42.5$\times$ against
+2.8$\times$. Crossing a cohort boundary was consistently no more
+costly than crossing a patient boundary, and generally less so, though the
+magnitude is imprecisely estimated: in the nested comparison the two drops
+were 0.039 and 0.063 AUROC, a ratio of 0.62 (\SI{95}{\percent} CI 0.37 to
+1.35), and in the reverse direction 0.32 (0.02 to 0.72). In 13 of 24
+leave-one-out folds a new patient from the same centre was harder than the
+other cohort entirely.
+Cohort identity and subject identity were similarly recoverable from the
+features (AUROC 0.92 and 0.95), both exceeding the seizure label itself
+(0.81), and the per-feature magnitude of cohort shift was uncorrelated with
+that feature's discriminative importance ($r=-0.096$). Area under the
+precision--recall curve fell by a factor of 165 across the range of
+evaluation prevalences used in the literature while AUROC moved by 0.033.
+Across four architectures rerun with five seeds each, the spread between
+architectures was 0.66 times the spread from initialisation alone in the
+cross-patient setting and 1.09 times it cross-cohort, and which architecture
+ranked best cross-cohort changed with the seed. Scored at the event level on continuous recording, the learned
+representations detected \SI{22}{\percent} of cross-cohort seizures at one
+false alarm per hour and \SI{50}{\percent} at two, against \SI{1}{\percent}
+and \SI{17}{\percent} for the handcrafted features.
+\textbf{Significance.} Under this protocol, cross-cohort transfer appears to
+depend more on the choice of representation than on the choice of
+architecture, and more on inter-patient variability than on the additional
+cohort shift observed between these two cohorts. A substantial part of the spread
+in published performance figures is attributable to evaluation protocol.
+\end{abstract}
+
+\vspace{-0.2cm}
+\noindent\small\textbf{Keywords:} seizure detection, scalp EEG,
+generalization, domain shift, evaluation methodology, benchmarking
+\normalsize
+
+\vspace{0.3cm}
+
+%% =====================================================================
+\section{Introduction}
+%% =====================================================================
+
+Automated seizure detection from scalp EEG has been reported at near-ceiling
+performance for more than a decade. On the CHB-MIT Scalp EEG Database
+\citep{shoeb2009} accuracies above \SI{98}{\percent} are routine, and several
+recent systems report figures above \SI{99}{\percent} together with
+false-prediction rates below 0.006 per hour \citep{hybridconv2025}. Clinical
+adoption has not followed. The discrepancy is usually attributed to
+distribution shift: a detector developed at one centre, on one acquisition
+system, in one patient population, is expected to fail at another. That
+expectation has motivated a substantial literature on domain adaptation for
+EEG, in which the target domain is variously defined as an unseen subject or
+an unseen dataset \citep{jemal2024}.
+
+The expectation is plausible but has not been measured
+(figure~\ref{fig:boundaries}). Cross-subject and cross-dataset
+generalization are treated as related but distinct problems,
+and the latter is generally presented as the harder of the two, yet the two
+are rarely evaluated side by side on identical windows, under identical
+splits, with identical models. Without that comparison it cannot be
+established whether a method that improves cross-dataset transfer is
+addressing dataset shift specifically, or is addressing inter-subject
+variability that is equally present within a single cohort. The distinction
+matters practically: if the residual error after aligning two datasets is
+inter-subject rather than inter-dataset, then the alignment is operating on
+the wrong axis, and the reported improvement would also have been obtained by
+pooling more subjects.
+
+A second difficulty is that reported figures are not comparable between
+studies. A recent survey of cross-subject EEG decoding identifies the absence
+of standardized benchmarking pipelines as a principal obstacle, noting that
+differences in artifact rejection thresholds, spectral filtering ranges,
+subject exclusion criteria, subject-split strategy and validation protocol
+substantially alter task difficulty, so that reported accuracies reflect the
+experimental pipeline as much as the intrinsic merit of the method
+\citep{crosssubjsurvey2026}. In seizure detection this is acute, because the
+positive class is rare: interictal activity dominates continuous recording by
+two to three orders of magnitude, and the near-universal practice of
+rebalancing before evaluation---by synthetic minority oversampling, by
+overlapping-window augmentation, or by majority undersampling---changes the
+operating conditions of the reported metric. Saha \etal \citep{saha2024}
+examined evaluation practice on CHB-MIT specifically and observed that many
+studies do not evaluate on the full recording, and that partial-data
+experiments yield high apparent performance that does not survive the
+imbalanced continuous setting.
+
+This is an instance of a general property of the metrics involved. Under
+random ranking the expected area under the precision--recall curve is the
+positive-class rate itself, so that rate is the chance level against which
+any value must be read \citep{saito2015}. When it varies by two orders of
+magnitude between evaluation protocols, as it does here, a raw value cannot
+be interpreted without it. Any metric whose chance level depends on
+prevalence will move when prevalence moves, and in seizure detection
+prevalence is a design choice rather than a property of the disease. The area under the receiver operating characteristic curve is
+prevalence-invariant and so does not exhibit the effect, but it is for that
+reason unable to reveal it, and it weights all parts of the ranking equally in
+a task where only the top of the ranking is clinically actionable
+\citep{saito2015}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F7_boundaries.pdf}
+\caption{\textbf{The two boundaries and the hypothesis under test.} (a) A
+model developed on one cohort can be asked to cross either of two
+boundaries: to a different patient within the same cohort, or to a different
+cohort entirely. Each ellipse is one patient. (b) Cross-dataset transfer is
+generally presented as the harder of the two, which implies a further large
+drop at the third point. The size of that drop, relative to the drop already
+incurred by meeting a new patient, is what this study measures.}
+\label{fig:boundaries}
+\end{figure}
+
+
+We therefore ran a controlled comparison. Two public scalp EEG cohorts were
+used that differ in patient age and clinical context as well as in
+acquisition hardware, sampling rate, electrode montage and mains frequency,
+and that consequently constitute a genuine cohort-level shift rather than a
+nominal one. These factors cannot be separated with these data, and the
+quantity measured here is the cost of crossing between two cohorts that
+differ in all of them at once. Fourteen published
+architectures spanning three orders of magnitude in parameter count, together
+with two handcrafted spectral feature families, were evaluated under a single
+fully specified protocol with three nested settings. Every model saw the same
+windows, the same splits and the same preprocessing, so that differences
+between settings are attributable to the setting rather than to the pipeline.
+
+We asked three questions. How large is the additional cost of crossing a
+dataset boundary, relative to the cost of crossing a patient boundary? Does
+that comparison depend on the choice of architecture, or on whether the
+representation is learned or hand-designed? And how much of the spread in
+reported seizure-detection performance is attributable to evaluation
+prevalence rather than to method?
+
+We do not propose a new architecture. The finding of this study is that,
+among the architectures examined and at the resolution these data permit,
+architecture is not where the limiting factor appears to lie.
+
+%% =====================================================================
+\section{Related work}
+%% =====================================================================
+
+\subsection{Performance and its interpretation on CHB-MIT}
+
+CHB-MIT \citep{shoeb2009} has been the dominant benchmark for scalp EEG
+seizure detection for over a decade, and reported performance has risen
+steadily. Recent work using classical feature engineering with explicit
+leakage control reports an area under the curve of 0.927 from a compact
+fifteen-feature set under strictly patient-independent nested
+cross-validation, with feature selection and spatial filtering performed
+within training folds only \citep{discoverappl2026}. Deep architectures
+routinely report higher figures. The gap between these two families of
+results is not straightforwardly attributable to representational capacity,
+because the evaluation protocols differ in ways that affect the achievable
+value of the metric.
+
+The reliability of the higher figures has been questioned from within the
+field. Saha \etal \citep{saha2024} note that studies frequently evaluate on a
+subset rather than the full continuous recording. Independently, the same
+concern appears in the general EEG decoding literature
+\citep{crosssubjsurvey2026}. Our contribution is to quantify the size of the
+effect for this task rather than to restate its existence.
+
+\subsection{Cross-subject and cross-dataset transfer}
+
+Cross-patient detectors have long been recognised as substantially harder
+than patient-specific ones, since seizure morphology, localization and
+duration vary markedly between individuals. Domain adaptation has been the
+dominant response. Jemal \etal \citep{jemal2024} evaluated three domain
+adaptation methods on CHB-MIT and Siena and reported accuracy improvements of
+\SI{10.3}{\percent} and \SI{7.4}{\percent} respectively. Figures of this
+kind are difficult to place against one another, because the adapted and
+unadapted baselines are rarely evaluated under a common protocol: an
+improvement reported over a weak baseline and an absolute figure obtained
+under a different windowing or class balance are not on the same scale. The
+comparison made here---identical windows, splits and preprocessing across
+every model and every setting---is intended to remove that particular source
+of ambiguity.
+
+Cross-dataset evaluation between CHB-MIT and Siena has been performed in both
+directions and in a pooled configuration \citep{hybridconv2025}, with $F_1$
+exceeding \SI{95}{\percent} reported for pure cross-dataset transfer. That
+evaluation follows a pipeline in which the minority class is expanded by
+synthetic minority oversampling and by sliding windows with \SI{80}{\percent}
+overlap, and the majority class is then undersampled to match.
+Overlapping-window augmentation at this rate produces near-duplicate windows
+within a single seizure episode, and rebalancing prior to evaluation fixes the
+prevalence at which the metric is computed. Neither choice is incorrect in
+itself, and both are declared; the difficulty is that a figure obtained under
+those conditions and a figure obtained on continuous recording are not
+comparable, and nothing in the reported metrics indicates by how much they
+differ.
+
+\subsection{Standardized benchmarking and null models}
+
+The need for standardized evaluation has been recognised across EEG
+decoding more broadly, and the survey cited above identifies the absence of
+common pipelines as a principal obstacle to comparing reported figures
+\citep{crosssubjsurvey2026}. That literature addresses breadth: common
+interfaces across many tasks and datasets. The present study is
+complementary in addressing depth. We hold one clinical task fixed and vary
+the generalization setting and the evaluation prevalence, so that the
+contribution of protocol to reported performance can be isolated from the
+contribution of method.
+
+A directly analogous comparison has been reported outside seizure detection.
+In consumer-grade EEG emotion recognition, a systematic comparison of EEGNet
+against traditional feature engineering with cross-dataset validation found
+that handcrafted features outperformed end-to-end learning in that
+low-channel, high-noise regime \citep{consumereeg2026}. Our result runs in the
+opposite direction, which is informative rather than contradictory: the
+advantage of learned representations appears to be regime-dependent, and a
+comparison of the two regimes constrains when either should be preferred.
+
+The principle underlying our controls is established. Conrad \etal
+\citep{conrad2022} constructed a spatial null that predicts which intracranial
+electrodes lie in the seizure onset zone from electrode placement alone, with
+no EEG data, and found that it classified electrodes at an area under the
+curve of 0.70, and that adding functional connectivity did not significantly
+improve on it; they argued that a feature should be required to outperform
+such a null before being called a biomarker. The present study applies that
+requirement in two directions at once: to the metric, by asking what a
+reported figure owes to the prevalence at which it was computed, and to the
+comparison between datasets, by asking what the difference between two
+reported figures owes to the conditions under which each was measured.
+
+%% =====================================================================
+\section{Methods}
+%% =====================================================================
+
+\subsection{Datasets}
+
+\textbf{CHB-MIT Scalp EEG Database} \citep{shoeb2009}. Paediatric subjects
+with intractable focal epilepsy recorded at Children's Hospital Boston during
+pre-surgical evaluation, with antiseizure medication tapered. Recordings are
+continuous at \SI{256}{\hertz} in a bipolar longitudinal montage, with seizure
+onsets and offsets annotated in per-subject summary files.
+
+The database contains 24 recording sets from 23 individuals: chb21 is the
+same patient as chb01, recorded some eighteen months later. We treat the two
+as separate units throughout, as the database itself does, and report counts
+as 24 for that reason. This is a deliberate choice with a cost: a
+cross-patient split that places chb01 and chb21 on opposite sides is not
+strictly patient-independent. Their windows are separated by more than a
+year of development and by a different recording session, so the leakage is
+limited, but it is not zero, and the cross-patient figures should be read as
+very slightly optimistic on that account. Treating them as one unit instead
+would remove the concern at the cost of one fewer held-out unit; we report
+which fold each falls in with the released per-fold results so that either
+convention can be recovered.
+
+\textbf{Siena Scalp EEG Database.} Fourteen adult subjects (20--71 years;
+thirteen with focal impaired-awareness seizures, one with focal-to-bilateral
+tonic--clonic) recorded at the University of Siena at \SI{512}{\hertz} in a
+referential montage with 29 EEG channels plus EKG. Seizure times are given in
+per-subject text files relative to registration start.
+
+The two cohorts differ in acquisition hardware, sampling rate, montage and
+mains frequency, and also in age group, syndrome mix and clinical context. A
+transfer between them is therefore a cohort shift in the full sense rather
+than an acquisition shift alone, and the two cannot be separated with these
+data. We use ``cohort shift'' throughout for that reason and return to the
+distinction in \S\ref{sec:whatshift}.
+
+\textbf{Annotation handling.} Siena annotation files carry free text alongside
+timestamps in two instances: an alternative time introduced by ``oppure'', and
+separate clinical and electrographic onsets. We parse the first well-formed
+\texttt{HH.MM.SS} token in each field, which preserves the clinical onset. One
+entry (PN00-3) implies a seizure of \SI{3660}{\second} and is treated as a
+transcription error; 43 of 44 annotated seizures are retained. The exclusion
+is recorded in the released manifest.
+
+\subsection{Preprocessing}
+
+\textbf{Montage harmonisation.} We derived the 17 bipolar channels of the
+CHB-MIT longitudinal montage in both cohorts. For Siena this required
+constructing bipolar derivations from the referential recording using the
+older T3/T4/T5/T6 nomenclature those files carry. All 41 Siena recordings and
+683 of 686 CHB-MIT recordings contain the electrodes required for all 17
+derivations. CHB-MIT contains a duplicated \texttt{T8-P8} channel, which we
+exclude to avoid weighting one derivation twice.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F6_spectra.pdf}
+\caption{\textbf{The two cohorts handle mains interference in opposite ways,
+which sets the usable band.} (a) CHB-MIT already carries a notch: power at
+\SI{60}{\hertz} lies about an order of magnitude below the surrounding
+spectrum and rises again by \SI{70}{\hertz}, which cannot occur in an
+unfiltered $1/f$ spectrum; the stopband spans roughly
+\SIrange{50}{70}{\hertz}. (b) Siena is un-notched, with a sharp
+\SI{50}{\hertz} peak and a harmonic at \SI{100}{\hertz}. The shaded
+\SIrange{1}{40}{\hertz} band lies below both artefacts. Fitting a spectral
+model across the CHB-MIT stopband inflates the estimated aperiodic exponent
+by approximately \SI{50}{\percent}.}
+\label{fig:spectra}
+\end{figure}
+
+
+\textbf{Spectral considerations.} The two cohorts handle mains interference in
+opposite ways, and this constrains the usable frequency range
+(figure~\ref{fig:spectra}). In CHB-MIT a notch has already been applied: power
+at \SI{60}{\hertz} sits roughly an order of magnitude \emph{below} the
+surrounding spectrum and rises again by \SI{70}{\hertz}, which cannot occur in
+an unfiltered $1/f$ spectrum; the stopband spans approximately
+\SIrange{50}{70}{\hertz}. Siena is un-notched and shows a sharp
+\SI{50}{\hertz} peak, about fifteen times the adjacent spectrum, with a
+harmonic at \SI{100}{\hertz}.
+
+We therefore band-pass filtered both cohorts to \SIrange{1}{40}{\hertz}, which
+lies below both artefacts. This constraint is not incidental: fitting a
+spectral model across the CHB-MIT stopband inflates the estimated aperiodic
+exponent by approximately \SI{50}{\percent} (mean 2.03 over
+\SIrange{4}{45}{\hertz} against 3.14 over \SIrange{4}{55}{\hertz} in the same
+recordings), an artefact of the filter rather than a property of the signal.
+
+\textbf{Resampling and referencing.} Siena recordings were resampled from
+\SI{512}{\hertz} to \SI{256}{\hertz} after filtering. Each channel was
+z-scored within its own recording, which removes per-session amplitude scaling
+without using information from any other recording.
+
+\subsection{Windowing and labelling}
+
+Recordings were divided into non-overlapping \SI{4}{\second} windows (1024
+samples). We use no overlap: overlapping windows drawn from the same seizure
+are near-duplicates, and their presence on both sides of a split inflates
+apparent performance.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F9_labelling.pdf}
+\caption{\textbf{Window labelling.} A window is positive when at least half
+of it falls inside an annotated seizure and negative when none of it does.
+Windows with intermediate overlap are discarded, since their label is
+genuinely ambiguous and assigning them either way introduces avoidable noise
+at the seizure boundary. Windows do not overlap one another.}
+\label{fig:labelling}
+\end{figure}
+
+
+A window was labelled positive if at least \SI{50}{\percent} of its duration
+fell within an annotated seizure, and negative if no part of it did. Windows
+with intermediate overlap were discarded rather than assigned to either class,
+since their label is genuinely ambiguous (figure~\ref{fig:labelling}). This
+yields \num{1000311} labelled windows across 38 subjects (CHB-MIT
+\num{873428}; Siena \num{126883}) with \num{3405} positive windows, a native
+positive rate of \SI{0.34}{\percent}.
+
+\subsection{Subsampling for the learned models}
+
+Retaining every window as raw time series would require approximately
+\SI{70}{\giga\byte}. We constructed a reduced set comprising every positive
+window and, from each recording, 60 randomly selected negative windows:
+\num{46245} windows at \SI{7.36}{\percent} positive. All seizure data is
+retained; only interictal data is reduced. This changes the evaluation
+prevalence, which we treat as a variable to be studied
+(section~\ref{sec:prev}) rather than a nuisance to be hidden.
+
+\subsection{Feature families and models}
+
+\textbf{Handcrafted features} (119 per window). Relative band power in five
+bands (delta \SIrange{1}{4}{\hertz}, theta \SIrange{4}{8}{\hertz}, alpha
+\SIrange{8}{13}{\hertz}, beta \SIrange{13}{30}{\hertz}, gamma
+\SIrange{30}{40}{\hertz}) for each of 17 channels (85 features), and the
+aperiodic exponent with its goodness of fit from spectral parameterisation
+\citep{donoghue2020} over \SIrange{1}{40}{\hertz} for each channel (34
+features). Power spectra were computed by Welch's method with a
+\SI{1}{\second} Hann window and \SI{50}{\percent} overlap. The fixed aperiodic
+model was used; the knee model did not converge on this data, returning
+exponents outside any physiologically plausible range. Classification used
+logistic regression with balanced class weights on standardised features.
+
+\textbf{Learned representations.} Fourteen published architectures were used
+as implemented in braindecode \citep{schirrmeister2017}, without modification,
+spanning \num{2402} to \num{1141889} parameters: EEGNet \citep{lawhern2018},
+EEGITNet \citep{salami2022}, EEGTCNet \citep{ingolfsson2020}, SincShallowNet
+\citep{borra2020}, SCCNet \citep{wei2019}, EEGInceptionERP
+\citep{santamaria2020}, ShallowFBCSPNet and Deep4Net
+\citep{schirrmeister2017}, EEGNeX \citep{chen2024}, ATCNet
+\citep{altaheri2022}, TIDNet \citep{kostas2020}, EEGSimpleConv
+\citep{ouahidi2023}, EEGConformer \citep{song2022} and SPARCNet
+\citep{jing2023}. Using an existing library rather than reimplementing removes
+one source of divergence from the original reports.
+
+Training used AdamW (learning rate \num{e-3}, weight decay \num{e-4}), batch
+size 256, class-weighted cross-entropy, mixed precision, and early stopping on
+validation AUROC with patience 4 over at most 20 epochs, with
+\SI{10}{\percent} of each training split held out for validation. No
+hyperparameter search was performed and identical settings were used for every
+architecture; the objective is comparison under a common protocol, not
+per-model optimisation.
+
+\subsection{Generalisation settings}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F1_pipeline.pdf}
+\caption{\textbf{Study design.} Two cohorts differing in age group and
+clinical context as well as in acquisition hardware, sampling rate, montage
+and mains frequency are harmonised to a common 17-channel bipolar montage, band-passed to
+\SIrange{1}{40}{\hertz}, resampled to \SI{256}{\hertz} and z-scored within
+each recording. Windows are \SI{4}{\second} with no overlap; windows
+overlapping a seizure by less than half are discarded rather than labelled.
+The same windows, splits and preprocessing are used for every model, so
+differences between the three settings are attributable to the setting
+rather than to the pipeline.}
+\label{fig:pipeline}
+\end{figure}
+
+
+Three nested settings were evaluated (figure~\ref{fig:pipeline}). \textbf{S1},
+within-patient: the first \SI{70}{\percent} of one subject's windows in
+temporal order for training, the remainder for testing. \textbf{S2},
+cross-patient: grouped five-fold cross-validation with folds formed over
+CHB-MIT subjects, so no subject contributes to both sides of a split.
+\textbf{S3}, cross-cohort: all of one cohort for training and all of the other
+for testing, in both directions. The comparison of interest is the S1$\to$S2
+drop against the S2$\to$S3 drop: the first is the cost of a new patient, the
+second the additional cost of a new centre. Only one of the two S3
+directions nests cleanly inside S1 and S2. Those two settings are both
+trained on CHB-MIT, so CHB-MIT $\rightarrow$ Siena continues the same
+sequence from the same source cohort, whereas Siena $\rightarrow$ CHB-MIT
+changes the training cohort as well and is not a further step in that
+sequence. We therefore take CHB-MIT $\rightarrow$ Siena as the primary
+comparison and report Siena $\rightarrow$ CHB-MIT separately, as a
+replication in the reverse direction.
+
+For the learned models, S1 was run on every CHB-MIT subject with at least 30
+positive windows on the training side and 8 on the test side. This admits 8
+of the 24 recording sets. The restriction is not only one of sample size: in several
+subjects every annotated seizure falls in the final \SI{30}{\percent} of the
+recording, so a temporal within-subject split leaves no positive training
+examples at all, and those subjects cannot enter S1 under any threshold.
+
+\subsection{Prevalence sweep}\label{sec:prev}
+
+To quantify protocol dependence we held the trained model fixed and varied
+only the class balance of the evaluation set. All positives were retained and
+negatives were drawn without replacement to achieve target positive rates of
+50, 25, 10, 7.36, 5 and \SI{1}{\percent}, together with the native rate of
+\SI{0.34}{\percent}. The upper end of this range corresponds to the balanced
+evaluation common in the literature; the lower end to continuous monitoring.
+
+\subsection{Seed variance and calibration}
+
+Because the sweep reports differences between architectures of the order of
+0.02--0.05 AUROC, we characterised the variation attributable to
+initialisation alone. Four architectures spanning 2.4$\times$10$^3$ to
+1.1$\times$10$^6$ parameters (EEGNet, ShallowFBCSPNet, ATCNet, SPARCNet)
+were rerun in every setting with five random seeds, holding the data,
+splits and hyperparameters fixed: 300 runs. This allows the spread between
+architectures to be set directly against the spread produced by
+initialisation alone, which is the quantity the paper's central claim turns
+on.
+Calibration was quantified per run by the Brier score and by expected
+calibration error over fifteen equal-width bins.
+
+\subsection{Negative controls}
+
+\textbf{Label permutation.} Labels were permuted within each subject,
+preserving per-subject class balance, and the full pipeline re-run, three
+times.
+
+\textbf{Recording context.} In CHB-MIT all positive windows originate from
+seizure-containing recordings. If those recordings carry a session-level
+signature---electrode adjustment, arousal, staff activity---a classifier could
+score well without representing ictal activity. We therefore trained a
+classifier to separate \emph{non-seizure} windows of seizure-containing
+recordings from \emph{non-seizure} windows of seizure-free recordings, using
+folds grouped over subjects.
+
+\subsection{Feature-space structure}
+
+To characterise what the features encode, we trained logistic regression to
+recover three targets from the same windows under identical five-fold
+cross-validation: cohort identity (binary), subject identity (one-vs-rest,
+averaged over subjects with at least 50 windows), and the seizure label.
+Silhouette scores were computed on the first two principal components.
+
+\subsection{Analyses from the saved predictions}
+
+The score of every test window was retained, with its subject and its
+position in the recording, so that the following could be computed without
+retraining.
+
+\emph{Matched prevalence.} The learned models were trained on a subsample
+of the windows (\SI{7.36}{\percent} positive) while the handcrafted features
+were evaluated on everything (\SI{0.34}{\percent}), which is not a
+like-for-like comparison. We addressed this in two ways. Each model's own
+test windows were resampled to a range of positive rates with the trained
+model held fixed; and, separately, every window of both cohorts was
+extracted as raw time series and the trained models were applied to all of
+it, so that the two representations could be compared on exactly the same
+\num{1000311} windows at the prevalence of continuous recording. The second
+required no retraining: the weights saved during the sweep were reused.
+
+\emph{Subject-level bootstrap.} Windows are not independent observations:
+tens of thousands of them come from a few dozen people, and resampling
+windows would give intervals far narrower than the estimate deserves. We
+resampled subjects with replacement instead, moving all of a subject's
+windows together, over 2000 replicates.
+
+\emph{Event-level evaluation.} Contiguous positive predictions were merged
+into events. An annotated seizure counted as detected if any predicted event
+overlapped it; every other predicted event counted towards the false-alarm
+rate. Sensitivity is reported at fixed false alarms per hour. Because the
+windows are a subsample of continuous recording, the denominator is
+effective rather than wall-clock time, so the false-alarm rate is optimistic
+and is comparable between the systems evaluated here rather than against
+figures obtained on full recordings.
+
+\emph{Reliability.} Predicted probabilities were binned into fifteen
+equal-width intervals and the observed frequency of the positive class
+computed within each.
+
+\subsection{Metrics and statistics}
+
+We report AUROC and AUPRC. At a native positive rate of \SI{0.34}{\percent},
+accuracy and specificity are uninformative, and AUROC alone is insufficient
+because it is invariant to prevalence while the precision achievable at a
+given sensitivity is not; AUPRC is therefore reported alongside the prevalence
+against which it should be read. The S1$\to$S2 and S2$\to$S3 drops were
+compared across architectures three ways: by resampling architectures with
+replacement (20\,000 draws) to obtain intervals on each drop and on their
+ratio; by a paired permutation test that randomises the sign of each
+architecture's difference; and by the Wilcoxon signed-rank and paired
+$t$-tests. These are computed on the nested direction; the reverse direction
+is reported the same way but separately. The ratio is reported alongside the difference because it is the
+better estimated of the two when both quantities are small.
+
+\subsection{Implementation and availability}
+
+Analyses used Python 3.12 with MNE-Python \citep{gramfort2013}, NeuroDSP,
+specparam \citep{donoghue2020}, scikit-learn, PyTorch and braindecode, with
+versions pinned in the released environment file. Learned models were trained
+on a single NVIDIA T4. Code, the window-level manifest and all per-fold
+results are available at \url{https://github.com/<user>/eeg-cross-cohort-seizure-detection}\\
+and archived at \url{https://doi.org/<Zenodo DOI on release>}.
+
+%% =====================================================================
+\section{Results}
+%% =====================================================================
+
+\subsection{Negative controls}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.52\textwidth]{figures/F5_controls.pdf}
+\caption{\textbf{Negative controls.} Detection performance with the actual
+labels, against two controls that should sit at chance and do. Permuting
+labels within subjects destroys the label--signal relationship; the
+recording-context control asks whether non-seizure windows of
+seizure-containing recordings can be separated from non-seizure windows of
+seizure-free recordings, which would indicate that apparent detection
+performance partly reflects session-level differences rather than ictal
+activity. Error bars are standard deviations across folds and repeats.}
+\label{fig:controls}
+\end{figure}
+
+
+Label permutation gave a mean AUROC of 0.511 across three repeats and both S2
+and S3 settings (range 0.480--0.541), with AUPRC 0.0013--0.0046 against a base
+rate of 0.0034. Performance collapses to chance when the label--signal
+relationship is destroyed.
+
+The recording-context test gave a mean AUROC of 0.522 across five grouped
+folds (range 0.476--0.572) for separating non-seizure windows of
+seizure-containing recordings ($n=\num{165819}$) from non-seizure windows of
+seizure-free recordings ($n=\num{704791}$). Session-level context is not
+linearly separable in these features, and the detection performance reported
+below is therefore unlikely to be an artefact of recording context
+(figure~\ref{fig:controls}).
+
+\subsection{Handcrafted features under transfer}\label{sec:hand}
+
+Table~\ref{tab:linear} gives leave-one-subject-out and cross-cohort
+performance for the handcrafted features on the full continuous data.
+Combining the two families outperformed either alone in every setting.
+
+\begin{table}[t]
+\centering\small
+\caption{Handcrafted features, continuous data at native prevalence (AUROC).
+Leave-one-subject-out values are means over held-out subjects.}
+\label{tab:linear}
+\begin{tabular}{lccc}
+\toprule
+Setting & band power & aperiodic & both \\
+\midrule
+Leave-one-out, CHB-MIT ($n=24$ recording sets) & 0.613 & 0.636 & 0.718 \\
+Leave-one-subject-out, Siena ($n=12$)   & 0.706 & 0.665 & 0.747 \\
+CHB-MIT $\rightarrow$ Siena             & 0.638 & 0.677 & 0.687 \\
+Siena $\rightarrow$ CHB-MIT             & 0.612 & 0.617 & 0.680 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The comparison the study turns on appears directly in these numbers. With
+band-power features, 13 of 24 CHB-MIT leave-one-out folds scored
+\emph{worse} than the cross-cohort transfer, and 11 of 24 in the reverse
+direction; with the aperiodic features, 16 of 24 and 10 of 24; with the
+combined set, 8 of 24 and 7 of 24. In a substantial fraction of cases, testing
+on a new patient from the same centre is harder than testing on a different
+centre entirely.
+
+\subsection{Learned representations under transfer}\label{sec:arch}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F2_architectures.pdf}
+\caption{\textbf{Generalisation across fourteen architectures.} (a) Each
+line is one architecture across the three settings; the heavy line is their
+mean and the horizontal marks give the handcrafted baseline at S2 and S3.
+The separation between learned and handcrafted representations under cohort
+transfer exceeds the spread among the learned representations themselves.
+(b) The two costs per architecture. The S1$\to$S2 drop, the cost of a new
+patient, exceeds the S2$\to$S3 drop, the additional cost of a new centre, in
+11 of 14 architectures. Two architectures return S1 below S2, which cannot
+reflect a genuine ordering and instead reflects the instability of the S1
+estimate.}
+\label{fig:arch}
+\end{figure}
+
+
+Table~\ref{tab:dl} gives the fourteen architectures across the three settings,
+and figure~\ref{fig:arch} shows the same data together with the handcrafted
+reference.
+
+\begin{table}[t]
+\centering\small
+\caption{Fourteen architectures across the three settings (mean AUROC).
+Architectures are ordered by parameter count. The final two columns give the
+cost of each boundary.}
+\label{tab:dl}
+\begin{tabular}{lrccccc}
+\toprule
+Architecture & Params & S1 & S2 & S3 & S1$\to$S2 & S2$\to$S3 \\
+\midrule
+EEGNet           & \num{2402}    & 0.937 & 0.850 & 0.845 &  0.087 &  0.005 \\
+EEGITNet         & \num{3670}    & 0.932 & 0.878 & 0.842 &  0.054 &  0.036 \\
+EEGTCNet         & \num{4198}    & 0.823 & 0.875 & 0.865 & $-$0.052 & 0.010 \\
+SincShallowNet   & \num{11714}   & 0.822 & 0.881 & 0.831 & $-$0.060 & 0.050 \\
+SCCNet           & \num{12882}   & 0.957 & 0.856 & 0.810 &  0.102 &  0.046 \\
+EEGInceptionERP  & \num{27342}   & 0.953 & 0.835 & 0.785 &  0.118 &  0.050 \\
+ShallowFBCSPNet  & \num{33282}   & 0.961 & 0.866 & 0.811 &  0.096 &  0.054 \\
+EEGNeX           & \num{55650}   & 0.978 & 0.851 & 0.830 &  0.127 &  0.020 \\
+ATCNet           & \num{113242}  & 0.953 & 0.888 & 0.838 &  0.066 &  0.050 \\
+TIDNet           & \num{200274}  & 0.870 & 0.852 & 0.834 &  0.018 &  0.018 \\
+Deep4Net         & \num{277352}  & 0.929 & 0.816 & 0.818 &  0.113 & $-$0.002 \\
+EEGSimpleConv    & \num{724922}  & 0.944 & 0.873 & 0.828 &  0.071 &  0.045 \\
+EEGConformer     & \num{791746}  & 0.953 & 0.868 & 0.849 &  0.085 &  0.019 \\
+SPARCNet         & \num{1141889} & 0.924 & 0.860 & 0.848 &  0.064 &  0.012 \\
+\midrule
+\textbf{mean}    &               & \textbf{0.924} & \textbf{0.861} & \textbf{0.831} & \textbf{0.064} & \textbf{0.029} \\
+\addlinespace
+handcrafted (both) & 119 features & --- & 0.709 & 0.684 & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three observations follow.
+
+\textbf{Representation separates the two families; architecture does not.}
+Under cross-cohort transfer the fourteen learned representations averaged
+0.831 against 0.684 for the handcrafted features, a difference of 0.147. The
+spread among the learned representations themselves was 0.785--0.865, so
+moving from feature engineering to a learned representation mattered
+substantially more than the choice among learned representations.
+
+\textbf{The cohort boundary costs less than the patient boundary, by an
+amount this design does not pin down.} In the nested comparison --- S1 and
+S2 both trained on CHB-MIT, then CHB-MIT $\rightarrow$ Siena --- the mean
+S1$\to$S2 drop was 0.063 (bootstrap \SI{95}{\percent} CI 0.032 to 0.090) and
+the mean S2$\to$S3 drop 0.039 (0.030 to 0.049), a ratio of 0.62 with an
+interval of 0.37 to 1.35. The direction was consistent in 10 of 14
+architectures, but the interval includes unity and the paired difference of
+0.024 ($-$0.010 to 0.055) does not reach conventional significance (paired
+permutation $p=0.197$; Wilcoxon $p=0.153$).
+
+The reverse direction, Siena $\rightarrow$ CHB-MIT, gives a smaller cost
+still: an S2$\to$S3 drop of 0.020 (0.002 to 0.038), a ratio of 0.32 (0.02 to
+0.72), consistent in 12 of 14 architectures. This is a replication rather
+than a further step in the sequence, since the training cohort changes, but
+it points the same way and more strongly.
+
+Pooling the two directions, as an earlier version of this analysis did,
+gives a ratio of 0.47 (0.27 to 0.98) and an interval that excludes unity.
+We report the nested figure as primary because pooling mixes a nested step
+with one that is not, and because the pooled estimate is the more favourable
+of the two --- which is precisely the kind of protocol choice this paper
+argues should be made explicit. The conclusion the evidence supports is that
+the cohort boundary is consistently the cheaper of the two, at somewhere
+between a third and roughly all of the patient boundary's cost, and that
+this design does not resolve it more finely than that.
+
+Two architectures, EEGTCNet and SincShallowNet, returned S1 below S2, which
+cannot reflect a genuine ordering and instead reflects the instability of
+the S1 estimate, computed on four subjects and depressed in both cases by a
+single subject (chb13: 0.544 and 0.442 respectively). Excluding them as a
+sensitivity analysis widens the S1$\to$S2 drop to 0.083 and leaves the
+S2$\to$S3 drop unchanged; we report this as sensitivity rather than as the
+primary result, since the exclusion was identified after inspecting the
+values.
+
+\textbf{Absolute performance remains modest at native prevalence.} The
+learned representations were evaluated at \SI{7.36}{\percent} positive; the
+handcrafted features at \SI{0.34}{\percent}. The next section separates the
+contribution of that difference.
+
+\subsection{Comparison at matched prevalence}
+
+Two comparisons place the representations on the same footing.
+
+Resampling each learned model's own test windows to a common positive rate
+removes the difference in class balance. At \SI{7.36}{\percent}, the learned
+representations reached AUROC 0.868 in S2 and 0.853 in S3, against 0.709 and
+0.687 for the handcrafted features on the matched-window subset
+(\S\ref{sec:hand}); a separation of roughly 0.16 attributable to the
+representation rather than to the prevalence (figure~\ref{fig:matched}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F14_native_comparison.pdf}
+\caption{\textbf{Both representations on the full continuous set.} The
+trained models are applied without retraining to every window of the
+relevant test set, and the evaluation prevalence is then varied from
+balanced down to the native \SI{0.34}{\percent} (dashed line). (a) AUROC is
+flat across the range and separates the two representations by about 0.16 at
+every point. (b) AUPRC falls with the base rate for both, but the ratio
+between them widens, because a lift of 42.5$\times$ and one of 2.8$\times$
+diverge in absolute terms as the base rate falls. The comparison is
+like-for-like: the same recordings, the same windows and the same
+prevalence.}
+\label{fig:nativecmp}
+\end{figure}
+
+
+Applying the trained models to every window of both cohorts settles it
+directly. On the same \num{1000311} windows and at the same
+\SI{0.34}{\percent} prevalence, the four architectures reached a mean
+cross-cohort AUROC of 0.843 against 0.686 for the handcrafted features
+(table~\ref{tab:native}, figure~\ref{fig:nativecmp}). The gap is 0.157, in the same direction and of
+the same size as the matched-subset estimate. Expressed as lift over chance,
+which is what determines whether a detector is usable at this base rate, the
+difference is larger: 42.5$\times$ against 2.8$\times$.
+
+\begin{table}[t]
+\centering\small
+\caption{Both representations on continuous data at native prevalence, with
+no retraining: the models are those from the sweep applied to every window
+of the relevant test set. Learned figures are means over four architectures
+and five seeds. Lift is AUPRC divided by the positive-class rate of the set
+in question, and is the quantity that determines whether a detector is
+usable at a base rate of this order.}
+\label{tab:native}
+\begin{tabular}{lcccc}
+\toprule
+& AUROC & AUPRC & lift & recording \\
+\midrule
+\multicolumn{5}{l}{\emph{learned representations}} \\
+\quad S1 within-patient          & 0.961 & 0.491 & 118.7$\times$ & 37 h \\
+\quad S3 cross-cohort            & 0.843 & 0.155 &  42.5$\times$ & 556 h \\
+\qquad CHB-MIT $\rightarrow$ Siena & 0.828 & 0.122 &  26.3$\times$ & 141 h \\
+\qquad Siena $\rightarrow$ CHB-MIT & 0.859 & 0.189 &  58.7$\times$ & 970 h \\
+\addlinespace
+\multicolumn{5}{l}{\emph{handcrafted features, same windows}} \\
+\quad S2 cross-patient           & 0.693 & 0.011 &   3.6$\times$ & --- \\
+\quad S3 cross-cohort            & 0.686 & 0.011 &   2.8$\times$ & 556 h \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.62\textwidth]{figures/F15_event_native.pdf}
+\caption{\textbf{Event-level operating curves on continuous recording.}
+Sensitivity against false alarms per hour, with the denominator real
+recording time rather than a subsample, so the two representations and the
+two settings can be read against each other and against figures reported
+elsewhere. Dotted lines mark 0.1 and 1 false alarms per hour. The
+within-patient curve approaches a usable operating point; the cross-cohort
+curve does not, and the handcrafted curve is lower again by roughly a factor
+of twenty at one false alarm per hour.}
+\label{fig:eventnative}
+\end{figure}
+
+
+Scored at the event level on the same continuous data, where the
+false-alarm denominator is real recording time, the separation persists
+(table~\ref{tab:eventnative}, figure~\ref{fig:eventnative}). At one false alarm per hour the learned
+representations detected \SI{22.1}{\percent} of cross-cohort seizures
+against \SI{1.1}{\percent} for the handcrafted features; at two per hour,
+\SI{49.8}{\percent} against \SI{17.0}{\percent}. Median detection delay was
+16 s against 28 s. Within patients the same models reached
+\SI{77.8}{\percent} at one false alarm per hour, with an 8 s delay.
+
+\begin{table}[t]
+\centering\small
+\caption{Event-level sensitivity on continuous data. Contiguous positive
+predictions are merged into events and a seizure counts as detected if any
+predicted event overlaps it. Unlike table~\ref{tab:event}, the denominator
+here is real recording time, so these rates are comparable between the two
+representations and with figures reported elsewhere on full recordings.}
+\label{tab:eventnative}
+\begin{tabular}{lccc}
+\toprule
+False alarms per hour & learned S1 & learned S3 & handcrafted S3 \\
+\midrule
+0.1 & 0.166 & 0.067 & 0.011 \\
+0.5 & 0.504 & 0.091 & 0.011 \\
+1.0 & 0.778 & 0.221 & 0.011 \\
+2.0 & 0.959 & 0.498 & 0.170 \\
+5.0 & 0.985 & 0.646 & 0.290 \\
+\addlinespace
+median delay & 8 s & 16 s & 28 s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The full-data evaluation also reproduces the architecture result on
+independent ground. Transferring across cohorts, the four architectures
+spanned 0.835 to 0.855, a range of 0.021 against a seed standard deviation
+of 0.020: a ratio of 1.05, against 1.09 on the subsampled set. A different
+dataset size, a different prevalence and a different evaluation return the
+same conclusion about architecture.
+
+AUROC was, as expected, largely unmoved by the resampling: 0.869 at
+\SI{50}{\percent} against 0.868 at \SI{7.36}{\percent} in S2. AUPRC moved
+substantially over the same range, from 0.895 to 0.658, while the lift over
+chance rose from 1.8$\times$ to 8.9$\times$. The two metrics move in opposite
+directions as prevalence falls because AUPRC tracks the base rate while lift
+does not, which is the reason a raw AUPRC cannot be read without it.
+
+\subsection{Event-level performance}
+
+Scoring the same predictions as a clinical system would be scored separates
+the settings far more sharply than window-level ranking does
+(table~\ref{tab:event}, figure~\ref{fig:event}). Within patients,
+event-level sensitivity reached 0.832 at one false alarm per hour. Across
+patients it was 0.413 and across cohorts 0.419 --- again close to one
+another, reproducing at the event level the pattern found at the window
+level, under a metric that makes no use of the ranking's tail.
+
+\begin{table}[t]
+\centering\small
+\caption{Event-level sensitivity at fixed false-alarm rates. Contiguous
+positive predictions are merged into events; a seizure counts as detected if
+any predicted event overlaps it. Because the evaluation windows are a
+subsample of continuous recording, these false-alarm rates are optimistic.}
+\label{tab:event}
+\begin{tabular}{lccc}
+\toprule
+False alarms per hour & S1 within-patient & S2 cross-patient & S3 cross-cohort \\
+\midrule
+0.1 & 0.832 & 0.119 & 0.182 \\
+0.5 & 0.832 & 0.325 & 0.299 \\
+1.0 & 0.832 & 0.413 & 0.419 \\
+2.0 & 0.894 & 0.478 & 0.532 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two things follow. A window-level AUROC of about 0.85 corresponds to
+detecting fewer than half of seizures at one false alarm per hour, so the
+choice of framing changes the apparent maturity of a system by more than any
+difference this study finds between architectures or between
+representations. And the cross-patient and cross-cohort figures agree to
+within 0.006 at this operating point, which is a stronger form of the
+paper's central result than the window-level comparison, since it holds
+under a metric that played no part in selecting anything.
+
+\subsection{Prevalence dependence}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F3_prevalence.pdf}
+\caption{\textbf{Evaluation prevalence changes the reported figure without
+changing the model.} The trained model is held fixed and only the class
+balance of the evaluation set is varied. (a) AUROC moves by 0.033 across the
+whole range. (b) AUPRC moves by a factor of 165 on the same runs, tracking
+the base rate shown dotted. The shaded region marks the balanced evaluation
+common in the literature; the dashed line marks the native
+\SI{0.34}{\percent} of continuous recording. A figure reported in one regime
+and a figure reported in the other are not comparable on AUPRC, and AUROC
+does not reveal the difference.}
+\label{fig:prev}
+\end{figure}
+
+
+With the trained model held fixed and only the evaluation class balance
+varied, AUROC moved by 0.033 across the full range while AUPRC moved by a
+factor of 165 (0.810 at \SI{50}{\percent} prevalence, 0.005 at the native
+\SI{0.34}{\percent}); see figure~\ref{fig:prev}. Precision lift over chance
+remained between 1.6$\times$ and 3.9$\times$ throughout, so the apparent
+collapse reflects the changing base rate rather than a change in
+discriminative ability.
+
+The practical consequence is that a system reported at balanced prevalence and
+a system reported at native prevalence cannot be compared on AUPRC, and AUROC
+does not reveal the difference. The range swept here spans the protocols in
+current use.
+
+\subsection{What the features encode}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F8_embedding.pdf}
+\caption{\textbf{What the features encode.} (a--c) The same principal
+component projection coloured by cohort, by subject and by label; the two
+components shown carry a minority of the variance, so absence of visible
+separation is not absence of signal. (d) Each target recovered from the full
+feature set by logistic regression under identical five-fold
+cross-validation. Cohort identity and subject identity are similarly
+recoverable, and both exceed the seizure label. In this representation the
+cohort boundary is not a stronger source of structure than the subject
+boundary, which is the mechanism behind the small S2$\to$S3 cost. The
+subject probe is one-vs-rest across 38 subjects while the cohort probe is
+binary, so the comparison is indicative rather than definitive.}
+\label{fig:embed}
+\end{figure}
+
+
+Measured identically---five-fold logistic regression on the same
+windows---cohort identity was recoverable at AUROC 0.92, subject identity at
+0.95, and the seizure label itself at 0.81 (figure~\ref{fig:embed}). Both
+forms of identity are more recoverable than the label the model is meant to
+predict, and the two are close to each other.
+
+The per-feature magnitude of cohort shift, measured by the Kolmogorov--Smirnov
+statistic between cohorts, was uncorrelated with that feature's importance for
+seizure detection ($r=-0.096$). Shift was concentrated in the beta band (mean
+KS 0.249) and in central and midline derivations, while the strongest
+discriminative weights sat elsewhere. Mean KS was similar for the two feature
+families (band power 0.185, aperiodic 0.181).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F10_matched_prevalence.pdf}
+\caption{\textbf{Learned and handcrafted representations compared at the same
+class balance.} Each model's own test windows are resampled to a range of
+positive rates with the trained model held fixed. (a) AUROC is essentially
+unmoved. (b) AUPRC falls with the base rate while the lift over chance
+rises, which is why AUPRC cannot be read without the prevalence it was
+computed at. The separation from the handcrafted baseline persists at every
+matched prevalence.}
+\label{fig:matched}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.62\textwidth]{figures/F11_event_level.pdf}
+\caption{\textbf{Event-level sensitivity against false alarms per hour.}
+Contiguous positive predictions are merged into events. The within-patient
+curve sits far above the cross-patient and cross-cohort curves, which are
+close to one another. The false-alarm rates are optimistic because the
+evaluation windows are a subsample of continuous recording.}
+\label{fig:event}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F12_reliability.pdf}
+\caption{\textbf{Reliability diagrams by setting.} Observed frequency of the
+positive class against predicted probability, with the diagonal marking
+perfect calibration. The curves fall below the diagonal in all three
+settings: the models are over-confident throughout, not only under transfer.}
+\label{fig:reliab}
+\end{figure}
+
+
+\subsection{Per-subject variation}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/F4_per_subject.pdf}
+\caption{\textbf{Per-subject performance, which the cohort mean conceals.}
+(a) Leave-one-subject-out AUROC for each held-out CHB-MIT subject, ordered
+by the combined feature set. The shaded region lies below chance. (b) The
+same values as distributions. Individual subjects fall well below chance
+--- chb14 reaches 0.141 with band power, indicating systematically inverted
+ranking rather than absent signal. Combining feature families narrows the
+spread but does not remove the failures.}
+\label{fig:persub}
+\end{figure}
+
+
+Leave-one-subject-out performance varied widely and included results below
+chance that cohort means conceal (figure~\ref{fig:persub}). With band power, 8
+of the 24 recording sets fell below 0.5 and chb14 reached 0.141, indicating
+systematically inverted ranking rather than absent signal. Combining feature
+families reduced this to 2 of 24 and narrowed the spread (SD 0.124 against
+0.192) but did not eliminate it: chb13 and chb15 remained below 0.5 in all
+three feature sets. The same pattern appears among the learned models, where
+chb13 gave 0.442 with SincShallowNet and 0.917 with SCCNet.
+
+\subsection{Variation attributable to initialisation}
+
+Four architectures rerun with five seeds each, with everything else held
+fixed, answer directly how much of the difference between them is real
+(table~\ref{tab:seed}). Averaged over configurations, initialisation alone
+moved AUROC by 0.030 in S1, 0.017 in S2 and 0.019 in S3.
+
+Set against that, the spread between the four architectures was 0.012 in S2
+and 0.021 in S3, giving ratios of architecture spread to seed noise of 0.66
+and 1.09. In the cross-patient setting the four architectures are separated
+by less than the variation a single one of them shows across seeds; in the
+cross-cohort setting, by about the same amount.
+
+The consequence is visible in the ranking. Which architecture performed best
+cross-cohort changed with the seed: SPARCNet at seed 1234, ATCNet at 3456
+and 7890, EEGNet at 5678 and 9012. Three of the four won at least once
+across five runs that differed in nothing but initialisation. Cross-patient,
+ATCNet led at four seeds of five and ShallowFBCSPNet at the fifth.
+
+Only within patients does architecture separate the models reliably (spread
+0.071, ratio 2.39), and that is the setting furthest from deployment. The
+within-patient instability is concentrated in one architecture rather than
+being a property of the setting: EEGNet gave a mean per-subject seed
+standard deviation of 0.072 in S1, with subject chb12 ranging from 0.451 to
+0.837 across five seeds, while ShallowFBCSPNet gave 0.009 in the same
+setting --- lower than its own cross-patient and cross-cohort figures.
+Reproducibility is therefore a property of the architecture-and-setting
+pair, not of the setting alone.
+
+Two consequences follow. Differences between architectures of the order of
+0.02--0.03 AUROC in S2 and S3 are of the same magnitude as the seed
+variation and should not be read as architectural. And the S1 column of
+table~\ref{tab:dl}, computed from a single seed on eight subjects, is the
+least reliable part of the design; the two architectures returning S1 below
+S2 are best understood in that light rather than as a property of those
+models.
+
+\begin{table}[t]
+\centering\small
+\caption{Variation attributable to initialisation set against variation
+attributable to architecture. Four architectures (EEGNet, ShallowFBCSPNet,
+ATCNet, SPARCNet), five seeds each, in every setting, with data, splits and
+hyperparameters held fixed: 300 runs. A ratio at or below one means the
+architectures are separated by no more than the noise from initialisation.}
+\label{tab:seed}
+\begin{tabular}{lcccc}
+\toprule
+Setting & mean seed SD & architecture spread & ratio & best architecture \\
+\midrule
+S1 within-patient & 0.030 & 0.071 & 2.39 & SPARCNet (all seeds) \\
+S2 cross-patient  & 0.017 & 0.012 & 0.66 & ATCNet (4 of 5 seeds) \\
+S3 cross-cohort   & 0.019 & 0.021 & 1.09 & changes with seed \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Calibration}
+
+Expected calibration error was highest within patients (mean 0.283, range
+0.101--0.461), lower across patients (0.166, 0.119--0.233) and lowest across
+cohorts (0.127, 0.037--0.232); the Brier score followed the same ordering
+(0.151, 0.107, 0.091). Calibration therefore did not deteriorate
+under transfer; it was poorest in the setting where ranking performance was
+best. The models are miscalibrated from the outset rather than becoming so
+when the domain changes, and the class-weighted training objective, which
+optimises ranking rather than probability, is the likely reason. Any
+deployment using a fixed probability threshold would require recalibration
+regardless of whether the data came from a new patient or a new centre.
+
+
+Predicted probabilities were over-confident in every setting: the mean
+predicted probability was 0.291 against an observed positive rate of 0.139
+within patients, 0.170 against 0.065 across patients, and 0.364 against
+0.074 across cohorts (figure~\ref{fig:reliab}). The pattern is informative
+rather than merely unfortunate. Miscalibration of this size was already
+present in the easiest setting, so it is not produced by transfer; the
+class-weighted objective optimises ranking rather than probability, and the
+resulting bias is a property of the training procedure that every one of
+these architectures inherits. It also follows that the transfer results
+reported above are not confounded by calibration, since ranking metrics are
+invariant to a monotone distortion of the scores.
+
+\subsection{Normalisation}
+
+Per-subject standardisation of the features improved transfer in one direction
+and degraded it in the other (CHB-MIT $\rightarrow$ Siena 0.687 to 0.745;
+Siena $\rightarrow$ CHB-MIT 0.680 to 0.632). Per-subject rank normalisation
+behaved similarly (0.739 and 0.666). We report this as an observation rather
+than as a recommendation.
+
+%% =====================================================================
+\subsection{Uncertainty of the estimates}
+
+Bootstrapping over subjects rather than windows places the estimates on the
+scale of the population they generalise to (table~\ref{tab:ci}). Interval
+width tracked the number of subjects in the held-out set, as it should: the
+mean \SI{95}{\percent} width was 0.107 AUROC across cohorts, where the test
+set holds fourteen subjects or twenty-four recording sets, and 0.208 across
+patients, where
+each fold holds four or five. The cross-cohort estimates, which carry this
+study's principal comparison, are therefore the better resolved of the two.
+
+\begin{table}[t]
+\centering\small
+\caption{Subject-level bootstrap, 2000 replicates over 300 runs. Resampling
+windows rather than subjects would treat correlated windows from the same
+person as independent and give substantially narrower intervals.}
+\label{tab:ci}
+\begin{tabular}{lccc}
+\toprule
+Setting & mean AUROC & mean 95\% CI width & subjects in test set \\
+\midrule
+S2 cross-patient & 0.870 & 0.208 & 4--5 \\
+S3 cross-cohort  & 0.847 & 0.107 & 14 or 24 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This bears directly on the central comparison. The mean S1$\to$S2 and
+S2$\to$S3 drops of 0.063 and 0.030 are differences between quantities whose
+own intervals span more than 0.2, which is consistent with the difference
+between them not reaching conventional significance even where the interval
+on their ratio excludes unity (\S\ref{sec:arch}), and is the reason we rest
+the argument on the effect
+size and the consistency of its direction rather than on a test.
+
+\section{Discussion}
+%% =====================================================================
+
+\subsection{The dataset boundary is not the expensive one}
+
+Under a single protocol, crossing a cohort boundary cost less than crossing
+a patient boundary in the great majority of architectures and in both
+directions, and in a substantial fraction of individual folds it cost less
+than nothing --- a new patient from the same centre was harder than the
+other cohort entirely. How much less is not settled here: the nested
+comparison puts the ratio at 0.62 with an interval running from 0.37 to
+1.35, and the reverse direction at 0.32. What the evidence supports is the
+ordering and its consistency, not a particular multiple.
+
+The mechanism is visible in the feature space. Cohort identity and subject
+identity were similarly recoverable (0.92 and 0.95), so in this representation
+the two boundaries are alike, and there is no reason to expect one to be
+markedly more expensive than the other. This has a direct implication for how
+domain adaptation targets are defined. If a method aligns a source dataset to
+a target dataset but the residual error is inter-subject, the alignment is
+operating on the wrong axis, and the reported improvement would also have been
+obtained by pooling more subjects. The observation is consistent with the
+survey suggestion that single-source domain adaptation may be theoretically
+misplaced for cross-subject EEG \citep{crosssubjsurvey2026}.
+
+A second observation qualifies the first. Cohort shift is real and measurable
+here---cohort identity is recoverable at 0.92---but its per-feature magnitude
+is uncorrelated with discriminative importance ($r=-0.096$). The features that
+move most between the two cohorts are largely not the features that carry the
+seizure signal. The shift is therefore present but, in this task and this
+band, largely benign. That is a stronger and more useful statement than the
+absence of shift would have been.
+
+\subsection{What kind of shift this is}\label{sec:whatshift}
+
+The two cohorts differ in more than acquisition. CHB-MIT is paediatric and
+recorded during medication taper in a pre-surgical unit; Siena is adult, and
+its syndrome mix is not the same. Sampling rate, montage, amplifier and mains
+frequency differ as well. This design cannot separate those factors, and we
+do not claim to: what is measured is the cost of moving between two cohorts
+that differ in all of these ways at once, which is also the situation a
+deployed system faces.
+
+This matters for how the result should be read. That crossing this boundary costs
+less than crossing a patient boundary is a statement about cohort transfer
+as clinically encountered, not a demonstration that amplifiers and montages
+are unimportant. Acquisition differences alone might
+cost less, with the population difference carrying most of what we measure;
+the two might also partly cancel. Separating them would require cohorts
+matched on population but differing in acquisition, or the reverse, and no
+such pair is publicly available for scalp EEG at this recording length.
+
+Two observations bear on it indirectly. The shift-importance correlation
+above indicates that whatever differs between the cohorts is largely
+orthogonal to the seizure signal in the 1--40 Hz band. And the two transfer
+directions, which differ by a factor of fourteen in training-set size, gave
+similar results, which argues against the measured cost being dominated by
+any quantity that scales with data volume.
+
+\subsection{Representation, not architecture}
+
+The gap between handcrafted and learned representations under cohort transfer
+(0.147 on the matched subset, 0.157 on the full continuous set) was several
+times the spread among fourteen learned architectures spanning three orders
+of magnitude in parameter count (0.081). A
+\num{2402}-parameter model from 2018 \citep{lawhern2018} transferred as well
+as a \num{1141889}-parameter model designed for this exact clinical task
+\citep{jing2023}. On this evidence architectural capacity does not appear to
+be what limits cross-cohort transfer in this task, though a wider sweep of
+capacities and training budgets would be needed to exclude it.
+
+We note that the opposite result has been reported in consumer-grade EEG
+emotion recognition, where handcrafted features outperformed end-to-end
+learning \citep{consumereeg2026}. The regimes differ in channel count, signal
+quality and the amount of labelled data, and the two results together suggest
+that the advantage of learned representations is regime-dependent rather than
+general. Establishing where the crossover lies would require sweeping those
+variables directly.
+
+\subsection{How much of an architectural difference is real}
+
+The seed analysis answers this directly rather than by inference. Across
+four architectures and five seeds, the spread between architectures was 0.66
+times the spread from initialisation in the cross-patient setting and 1.09
+times it cross-cohort. At that resolution the architectures are not
+separable: which one performed best cross-cohort changed with the seed, and
+three of the four won at least once across five runs that differed in
+nothing else. An architecture ranking computed from a single seed, which is
+what the literature reports, is reporting initialisation as much as design.
+
+This is the most direct evidence the study offers on the point. Stated
+precisely: among the architectures examined, and at the resolution the
+available data permit, architecture contributes less to cross-cohort
+variation than either representation choice or initialisation. The claim is
+not that architectures are equivalent in general, nor that the remaining ten
+would behave the same way, but that the differences observed here in the two
+transfer settings are no larger than the variation produced by
+initialisation, and so cannot be attributed to the architecture on this
+evidence. Only within patients does architecture separate the models by more
+than that noise (ratio 2.39), and that is the setting furthest from
+deployment. Whether the same holds for the remaining ten architectures, or
+at larger sample sizes where smaller differences would become resolvable, is
+not settled here.
+
+It also indicates where a benchmark of this kind is most fragile, though
+less simply than might be expected. Within-patient evaluation was the most
+seed-sensitive setting on average, but the sensitivity was concentrated in
+one architecture: EEGNet's mean per-subject seed standard deviation was
+0.072 in S1 against ShallowFBCSPNet's 0.009 in the same setting, the latter
+lower than its own cross-patient and cross-cohort figures. Reproducibility
+is a property of the architecture-and-setting pair rather than of either
+alone, and cannot be assumed from the setting. A benchmark reporting a
+single seed is not measuring what it claims to.
+
+\subsection{Protocol dependence and comparability}
+
+Published figures for this task span 0.61 AUC to \SI{99.7}{\percent} accuracy.
+Our prevalence sweep shows that AUPRC alone moves by a factor of 165 across
+the protocols in use, with the underlying discriminative ability unchanged.
+Two conclusions follow. First, AUPRC is uninterpretable without the base
+rate against which it is to be read, and should be reported alongside it. Second, AUROC, while prevalence-invariant
+and therefore stable, cannot reveal the difference and should not be used
+alone to argue that two systems are comparable.
+
+The general point is that a metric whose chance level is set by the
+composition of the evaluation set cannot be interpreted without that
+composition. In seizure detection the composition is a design choice, made
+when the evaluation windows are selected, and it is not always reported.
+
+\subsection{Clinical implications}
+
+At the prevalence of continuous monitoring, the precision achievable at
+clinically useful sensitivity remains low: AUPRC 0.005 against a base rate of
+0.0034, a lift of under 4$\times$. Reported figures obtained on rebalanced
+data do not describe this operating point.
+
+The event-level results make the same point in the units a clinical reader
+uses, and on continuous recording they can be read directly. A cross-cohort
+AUROC of 0.843 corresponds to detecting \SI{22.1}{\percent} of seizures at
+one false alarm per hour and \SI{49.8}{\percent} at two. Within patients the
+same models reach \SI{77.8}{\percent} at one false alarm per hour with a
+median delay of 8 s, which is close to a usable operating point; across
+cohorts, at 16 s and a fifth of the sensitivity, it is not.
+
+Two things follow. The gap between window-level and event-level framing is
+larger than any difference this study finds between architectures, so a
+system reported only at the window level cannot be assessed for clinical
+readiness. And the representation gap that AUROC renders as 0.157 appears at
+the operating point as a twentyfold difference in sensitivity
+(\SI{22.1}{\percent} against \SI{1.1}{\percent} at one false alarm per hour),
+which is the scale at which the choice actually matters.
+
+Calibration compounds this. The models were over-confident in every setting,
+including the within-patient one, so a threshold chosen during development
+will not transfer even to the same patient's later recording without
+recalibration.
+
+The per-subject results matter more than the cohort mean for deployment.
+Performance on an individual subject ranged from 0.141 to 0.913, and the
+failures cannot be anticipated in advance for a new patient. A single global
+threshold is therefore not appropriate; per-patient calibration, or an
+abstention mechanism that declines to report on subjects where the model is
+unreliable, would be more defensible. Establishing which subjects fail, and
+why, is a more useful direction than a further increment in mean performance.
+
+\subsection{What the design does and does not establish}
+
+Three features of the design bound what can be concluded from it, and each
+bounds a different claim.
+
+\emph{The precision of the estimates.} Resampling subjects rather than
+windows gives honest but wide intervals where the held-out set is small: a
+mean \SI{95}{\percent} width of 0.208 AUROC across patients, against 0.107
+across cohorts. The two generalisation costs, 0.063 and 0.039 in the nested
+direction, are therefore estimates with intervals of their own, and the
+interval on their ratio, 0.37 to 1.35, includes unity. The comparison is
+consequently an ordering supported by its consistency --- 10 of 14
+architectures in the nested direction, 12 of 14 in the reverse, and the same
+ordering under an independent event-level metric --- rather than a
+quantitative claim about how much cheaper the cohort boundary is. A design
+with more architectures, or with a third cohort providing further nested
+sequences, would be needed to resolve the magnitude.
+
+\emph{The within-patient estimate.} S1 admits eight of the twenty-four
+CHB-MIT recording sets, and averaged over architectures it is the most seed-sensitive of
+the three settings. The restricted coverage is a property of the data rather
+than of the threshold chosen: in several subjects every annotated seizure
+falls in the final \SI{30}{\percent} of the recording, so a temporal split
+leaves no positive training examples at all. The seed sensitivity is not
+uniform across architectures --- it is concentrated in EEGNet, while
+ShallowFBCSPNet is more stable in S1 than in either transfer setting --- so
+it should be read as a property of particular architecture-and-setting pairs
+rather than of S1 as such. Either way the consequence is confined to S1: the
+cross-patient and cross-cohort estimates, on which the central comparison
+depends, are drawn from the whole cohort.
+
+\emph{The scope of the evidence.} Two cohorts, both focal epilepsy, both
+recorded in pre-surgical monitoring units with medication tapered rather
+than in the ambulatory conditions an eventual application targets. Siena
+contributes 3047 subsampled windows against 43\,198 for CHB-MIT, so the two
+transfer directions are not symmetric tests, and Siena also proved the
+easier of the two cohorts to fit (leave-one-subject-out 0.747 against 0.718,
+SD 0.102 against 0.123). Only the CHB-MIT
+$\rightarrow$ Siena direction nests inside the within- and cross-patient
+settings, so the reverse direction functions as a replication rather than as
+a second estimate of the same quantity; that it points the same way is
+supporting evidence, not confirmation. A third cohort would supply further
+nested sequences and would test the result properly.
+
+\subsection{Further limitations}
+
+Event-level rates on the full continuous set use a denominator of real
+recording time and are comparable both with the handcrafted results and with
+the clinical literature. The subsampled event-level figures reported
+alongside them, retained for continuity with the sweep, use effective rather
+than wall-clock time and are optimistic; they should be read only against
+each other.
+
+Hyperparameters were held fixed across architectures, which is what makes
+the comparison a comparison, but may disadvantage models that require
+tuning. Seed variance was characterised for four of the fourteen
+architectures; extending it to the rest would establish whether the figures
+reported here are typical of the whole set. The
+subject-identity probe is one-vs-rest across 38 subjects while the cohort
+probe is binary: both are measured identically, but the tasks are not
+equally hard, so that comparison is indicative rather than definitive.
+
+\subsection{Future work}
+
+Three directions follow. Event-level metrics at native prevalence would
+establish whether any of these systems reaches a clinically usable operating
+point. A third cohort, ideally ambulatory rather than pre-surgical, would test
+whether the cohort--patient relationship reported here generalises. And the
+per-subject failures, which are large, reproducible across architectures and
+currently unexplained, are the most tractable target for improvement: a method
+that identified in advance which patients a detector will fail on would be
+more clinically valuable than one that raised the mean.
+
+%% =====================================================================
+\section{Conclusion}
+%% =====================================================================
+
+Under a single protocol applied to two public scalp EEG cohorts, transferring a seizure
+detector to a new recording centre was consistently no more costly than
+transferring it to a new patient, and generally less so (ratio 0.62,
+\SI{95}{\percent} CI 0.37 to 1.35 in the nested direction; 0.32, 0.02 to 0.72
+in the reverse). The ordering is what these data establish; the multiple is
+not, and in a
+substantial fraction of cases it was smaller still. This held across fourteen
+architectures spanning three orders of magnitude in parameter count, which
+differed among themselves far less than they differed from handcrafted
+spectral features. Cohort identity and subject identity were similarly
+encoded in the feature space, and the components that shifted most between
+cohorts were largely not the discriminative ones.
+
+Under the evaluation protocol used here, cross-cohort performance in these
+two cohorts appears to be influenced more strongly by the choice of
+representation than by the choice of architecture, and more strongly by
+inter-patient variability than by the additional cohort shift measured
+between these two cohorts. Separately, a substantial part of the spread in
+published performance figures is attributable to evaluation prevalence: AUPRC
+moved by two orders of magnitude across the protocols in current use while the
+underlying discriminative ability did not change. Reported figures for this
+task are not comparable unless the evaluation prevalence is stated and the
+evaluation is performed on continuous recording. Scored as a clinician would score
+it --- at the event level, on continuous recording, at one false alarm per
+hour --- the best of these systems detects around a fifth of seizures in a
+cohort it has not seen, and the handcrafted baseline around one in a
+hundred.
+
+%% =====================================================================
+
+\section*{Data availability}
+Both datasets are public: the CHB-MIT Scalp EEG Database and the Siena Scalp
+EEG Database, distributed through PhysioNet. No new human data were collected.
+
+\section*{Code availability}
+Analysis code, the window-level manifest and all per-fold results are
+available at \url{https://github.com/<user>/eeg-cross-cohort-seizure-detection},
+archived at \url{https://doi.org/<Zenodo DOI on release>}.
+
+\section*{Declaration of competing interest}
+The author reports no competing interests.
+
+\section*{Funding}
+This research received no specific grant from any funding agency.
+
+%% =====================================================================
+%%  BIBLIOGRAPHY, EMBEDDED
+%%
+%%  Held inline rather than generated by BibTeX, so the file compiles with
+%%  pdflatex alone and cannot fall out of step with an external .bib.
+%%  Entries are in order of first citation. references.bib is kept in the
+%%  repository and carries the same entries, for anyone who prefers to
+%%  regenerate this list.
+%%
+%%  To switch back to BibTeX: delete this environment and restore
+%%      %%      \bibliography{references}
+%% =====================================================================
+\begin{thebibliography}{24}
+\providecommand{\natexlab}[1]{#1}
+
+\bibitem{shoeb2009}
+A.~H. Shoeb.
+\newblock \emph{Application of Machine Learning to Epileptic Seizure Onset
+  Detection and Treatment}.
+\newblock PhD thesis, Massachusetts Institute of Technology, 2009.
+
+\bibitem{hybridconv2025}
+P.~K. Upadhyay, P.~Kumar, M.~K. Panda, and A.~K. Samantaray.
+\newblock Seamless integration for enhanced seizure prediction using
+  HybridConvMobileNet on Typhoon HIL.
+\newblock \emph{Scientific Reports}, 15(1):45480, 2025.
+
+\bibitem{jemal2024}
+I.~Jemal, L.~Abou-Abbas, K.~Henni, A.~Mitiche, and N.~Mezghani.
+\newblock Domain adaptation for {EEG}-based, cross-subject epileptic seizure
+  prediction.
+\newblock \emph{Frontiers in Neuroinformatics}, 18:1303380, 2024.
+
+\bibitem{crosssubjsurvey2026}
+T.~Li, Y.~Yan, F.~Dou, W.~Song, and X.~Zhang.
+\newblock Cross-subject generalization for {EEG} decoding: a survey of deep
+  learning methods.
+\newblock \emph{Progress in Biomedical Engineering}, 8(2):022013, 2026.
+
+\bibitem{saha2024}
+E.~Ali, M.~Angelova, and C.~Karmakar.
+\newblock Epileptic seizure detection using {CHB-MIT} dataset: the overlooked
+  perspectives.
+\newblock \emph{Royal Society Open Science}, 11(5):230601, 2024.
+
+\bibitem{saito2015}
+T.~Saito and M.~Rehmsmeier.
+\newblock The precision-recall plot is more informative than the {ROC} plot
+  when evaluating binary classifiers on imbalanced datasets.
+\newblock \emph{PLoS ONE}, 10(3):e0118432, 2015.
+
+\bibitem{discoverappl2026}
+S.~Ghosh, V.~Singh, and O.~S. Powar.
+\newblock Seizure detection using {EEG} on the {CHB-MIT} dataset via
+  multi-domain feature engineering and classical machine learning.
+\newblock \emph{Discover Applied Sciences}, 8(3):312, 2026.
+
+\bibitem{consumereeg2026}
+C.~R. Paredes~Ocaranza, B.~Yun, and E.~D. Paredes~Ocaranza.
+\newblock Traditional machine learning outperforms {EEGNet} for consumer-grade
+  {EEG} emotion recognition: a comprehensive evaluation with cross-dataset
+  validation.
+\newblock \emph{Sensors}, 25(23):7262, 2025.
+
+\bibitem{conrad2022}
+E.~C. Conrad, J.~M. Bernabei, N.~Sinha, N.~J. Ghosn, J.~M. Stein, R.~T.
+  Shinohara, and B.~Litt.
+\newblock Addressing spatial bias in intracranial {EEG} functional connectivity
+  analyses for epilepsy surgical planning.
+\newblock \emph{Journal of Neural Engineering}, 19(5):056019, 2022.
+
+\bibitem{donoghue2020}
+T.~Donoghue, M.~Haller, E.~J. Peterson, P.~Varma, P.~Sebastian, R.~Gao,
+  T.~Noto, A.~H. Lara, J.~D. Wallis, R.~T. Knight, A.~Shestyuk, and B.~Voytek.
+\newblock Parameterizing neural power spectra into periodic and aperiodic
+  components.
+\newblock \emph{Nature Neuroscience}, 23(12):1655--1665, 2020.
+
+\bibitem{schirrmeister2017}
+R.~T. Schirrmeister, J.~T. Springenberg, L.~D.~J. Fiederer, M.~Glasstetter,
+  K.~Eggensperger, M.~Tangermann, F.~Hutter, W.~Burgard, and T.~Ball.
+\newblock Deep learning with convolutional neural networks for {EEG} decoding
+  and visualization.
+\newblock \emph{Human Brain Mapping}, 38(11):5391--5420, 2017.
+
+\bibitem{lawhern2018}
+V.~J. Lawhern, A.~J. Solon, N.~R. Waytowich, S.~M. Gordon, C.~P. Hung, and
+  B.~J. Lance.
+\newblock {EEGNet}: a compact convolutional neural network for {EEG}-based
+  brain--computer interfaces.
+\newblock \emph{Journal of Neural Engineering}, 15(5):056013, 2018.
+
+\bibitem{salami2022}
+A.~Salami, J.~Andreu-Perez, and H.~Gillmeister.
+\newblock {EEG-ITNet}: an explainable inception temporal convolutional network
+  for motor imagery classification.
+\newblock \emph{IEEE Access}, 10:36672--36685, 2022.
+
+\bibitem{ingolfsson2020}
+T.~M. Ingolfsson, M.~Hersche, X.~Wang, N.~Kobayashi, L.~Cavigelli, and
+  L.~Benini.
+\newblock {EEG-TCNet}: an accurate temporal convolutional network for embedded
+  motor-imagery brain--machine interfaces.
+\newblock In \emph{IEEE International Conference on Systems, Man, and
+  Cybernetics (SMC)}, pages 2958--2965. IEEE, 2020.
+
+\bibitem{borra2020}
+D.~Borra, S.~Fantozzi, and E.~Magosso.
+\newblock Interpretable and lightweight convolutional neural network for {EEG}
+  decoding: application to movement execution and imagination.
+\newblock \emph{Neural Networks}, 129:55--74, 2020.
+
+\bibitem{wei2019}
+C.-S. Wei, T.~Koike-Akino, and Y.~Wang.
+\newblock Spatial component-wise convolutional network ({SCCNet}) for
+  motor-imagery {EEG} classification.
+\newblock In \emph{9th International IEEE/EMBS Conference on Neural Engineering
+  (NER)}, pages 328--331. IEEE, 2019.
+
+\bibitem{santamaria2020}
+E.~Santamar{\'i}a-V{\'a}zquez, V.~Mart{\'i}nez-Cagigal, F.~Vaquerizo-Villar,
+  and R.~Hornero.
+\newblock {EEG-Inception}: a novel deep convolutional neural network for
+  assistive {ERP}-based brain--computer interfaces.
+\newblock \emph{IEEE Transactions on Neural Systems and Rehabilitation
+  Engineering}, 28(12):2773--2782, 2020.
+
+\bibitem{chen2024}
+X.~Chen, X.~Teng, H.~Chen, Y.~Pan, and P.~Geyer.
+\newblock Toward reliable signals decoding for electroencephalogram: a
+  benchmark study to {EEGNeX}.
+\newblock \emph{Biomedical Signal Processing and Control}, 87:105475, 2024.
+
+\bibitem{altaheri2022}
+H.~Altaheri, G.~Muhammad, and M.~Alsulaiman.
+\newblock Physics-informed attention temporal convolutional network for
+  {EEG}-based motor imagery classification.
+\newblock \emph{IEEE Transactions on Industrial Informatics}, 19(2):2249--2258,
+  2022.
+
+\bibitem{kostas2020}
+D.~Kostas and F.~Rudzicz.
+\newblock Thinker invariance: enabling deep neural networks for {BCI} across
+  more people.
+\newblock \emph{Journal of Neural Engineering}, 17(5):056008, 2020.
+
+\bibitem{ouahidi2023}
+Y.~El~Ouahidi, V.~Gripon, B.~Pasdeloup, G.~Bouallegue, N.~Farrugia, and
+  G.~Lioi.
+\newblock A strong and simple deep learning baseline for {BCI} {MI} decoding.
+\newblock \emph{arXiv preprint arXiv:2309.07159}, 2023.
+
+\bibitem{song2022}
+Y.~Song, Q.~Zheng, B.~Liu, and X.~Gao.
+\newblock {EEG} Conformer: convolutional transformer for {EEG} decoding and
+  visualization.
+\newblock \emph{IEEE Transactions on Neural Systems and Rehabilitation
+  Engineering}, 31:710--719, 2022.
+
+\bibitem{jing2023}
+J.~Jing, W.~Ge, S.~Hong, M.~B. Fernandes, Z.~Lin, C.~Yang, S.~An, A.~F.
+  Struck, A.~Herlopian, I.~Karakis, J.~J. Halford, M.~C. Ng, E.~L. Johnson,
+  B.~L. Appavu, R.~A. Sarkis, G.~Osman, P.~W. Kaplan, M.~B. Dhakar, L.~A.
+  Jayagopal, Z.~Sheikh, O.~Taraschenko, S.~Schmitt, H.~A. Haider, J.~A. Kim,
+  C.~B. Swisher, N.~Gaspard, M.~C. Cervenka, A.~A. Rodriguez~Ruiz, J.~W. Lee,
+  M.~Tabaeizadeh, E.~J. Gilmore, K.~Nordstrom, J.~Y. Yoo, M.~G. Holmes, S.~T.
+  Herman, J.~A. Williams, J.~Pathmanathan, F.~A. Nascimento, Z.~Fan,
+  S.~Nasiri, M.~M. Shafi, S.~S. Cash, D.~B. Hoch, A.~J. Cole, E.~S. Rosenthal,
+  S.~F. Zafar, J.~Sun, and M.~B. Westover.
+\newblock Development of expert-level classification of seizures and rhythmic
+  and periodic patterns during {EEG} interpretation.
+\newblock \emph{Neurology}, 100(17):e1750--e1762, 2023.
+
+\bibitem{gramfort2013}
+A.~Gramfort, M.~Luessi, E.~Larson, D.~A. Engemann, D.~Strohmeier, C.~Brodbeck,
+  R.~Goj, M.~Jas, T.~Brooks, L.~Parkkonen, and M.~H{\"a}m{\"a}l{\"a}inen.
+\newblock {MEG} and {EEG} data analysis with {MNE-Python}.
+\newblock \emph{Frontiers in Neuroscience}, 7:267, 2013.
+
+\end{thebibliography}
+
+\end{document}
+
+%% =====================================================================
+%%  SWITCHING TO IOPART FOR SUBMISSION
+%%
+%%  1. Download iopart.cls and iopart-num.bst from IOP and upload both.
+%%  2. Replace the preamble with:
+%%       \documentclass[12pt]{iopart}
+%%       \usepackage{iopams}
+%%       \usepackage[T1]{fontenc}\usepackage[utf8]{inputenc}
+%%       \usepackage{graphicx}\usepackage{amsmath}\usepackage{booktabs}
+%%       \usepackage{siunitx}\usepackage[hidelinks]{hyperref}
+%%     iopart defines \etal, so delete the \newcommand.
+%%     iopart sets its own margins, so delete the geometry line.
+%%  3. Replace the title block with \title / \author / \address / \ead /
+%%     abstract / \submitto{\JNE} / \maketitle.
+%%  4. Replace the bibliography with:
+%%       \section*{References}
+%%       \bibliographystyle{iopart-num}
+%%       \bibliography{references}
+%%  5. Change every \citep to \cite.
+%% =====================================================================

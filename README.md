@@ -1,4 +1,3 @@
-# eeg-cross-cohort-seizure-detection
 # Cross-patient and cross-cohort generalisation in scalp EEG seizure detection
 
 Does an automated seizure detector lose more when it meets a **new patient**
@@ -211,8 +210,3 @@ archived DOI (to be added on release).
 
 MIT for the code. The datasets carry their own terms; see PhysioNet. Nothing
 here redistributes patient data.
-
-
-Code released under the MIT Licence — see LICENSE.
-
-The datasets carry their own terms; consult PhysioNet. Nothing in this repository redistributes patient data.

@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+title: >-
+  Cross-patient and cross-cohort generalisation in scalp EEG
+  seizure detection
+message: Please cite the manuscript once it appears; until then, this repository.
+type: software
+authors:
+  - given-names: Anurag
+    family-names: Tiwari
+    affiliation: >-
+      Department of Computer Science and Engineering,
+      South Asian University, New Delhi
+license: MIT

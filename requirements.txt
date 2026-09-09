@@ -1,0 +1,17 @@
+# Pinned to the versions used to produce the reported results.
+# braindecode's API changed during this work (EEGNetv4 -> EEGNet, and the
+# return format of get_params), so the version is not incidental.
+
+numpy==1.26.4
+scipy==1.13.1
+pandas==2.2.2
+scikit-learn==1.5.1
+matplotlib==3.9.1
+mne==1.7.1
+neurodsp==2.2.1
+specparam==2.0.0rc7
+pyarrow==17.0.0
+
+# stage 7 only (Kaggle GPU)
+torch==2.4.0
+braindecode==0.8.1
